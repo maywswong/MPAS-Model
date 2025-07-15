@@ -801,7 +801,6 @@
 			<var name="rniblten"/>
 			<var name="rthratensw"/>
 			<var name="rthratenlw"/>
-<<<<<<< atmosphere/develop-EPA_FDDA
 			<var name="rthfddaten"/>
 			<var name="rqvfddaten"/>
 			<var name="rufddaten"/>
@@ -816,8 +815,6 @@
 			<var name="v_fdda_new"/>
 			<var name="pin"/>
 			<var name="ozmixm"/>
-=======
->>>>>>> develop
 			<var name="isltyp"/>
 			<var name="ivgtyp"/>
 			<var name="mminlu"/>
