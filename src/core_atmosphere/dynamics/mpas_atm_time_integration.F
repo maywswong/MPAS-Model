@@ -28,6 +28,7 @@ module atm_time_integration
    use mpas_atm_boundaries, only : nSpecZone, nRelaxZone, nBdyZone, mpas_atm_get_bdy_state, mpas_atm_get_bdy_tend  ! regional_MPAS addition
    
    use mpas_atm_iau  
+   use mpas_atm_fdda
 
    integer :: timerid, secs, u_secs
 
@@ -174,7 +175,7 @@ module atm_time_integration
    end subroutine mpas_atm_dynamics_finalize
 
 
-   subroutine atm_timestep(domain, dt, nowTime, itimestep)
+   subroutine atm_timestep(domain, dt, nowTime, itimestep, xtime_s)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
    ! Advance model state forward in time by the specified time step
    !
@@ -190,6 +191,7 @@ module atm_time_integration
       real (kind=RKIND), intent(in) :: dt
       type (MPAS_Time_type), intent(in) :: nowTime
       integer, intent(in) :: itimestep
+      real (kind=RKIND), intent(in) :: xtime_s
 
 
       type (MPAS_Time_type) :: currTime
@@ -207,7 +209,7 @@ module atm_time_integration
       call mpas_pool_get_config(block % configs, 'config_apply_lbcs', config_apply_lbcs)
 
       if (trim(config_time_integration) == 'SRK3') then
-         call atm_srk3(domain, dt, itimestep)
+         call atm_srk3(domain, dt, itimestep, xtime_s)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), messageType=MPAS_LOG_ERR)
          call mpas_log_write('Currently, only ''SRK3'' is supported.', messageType=MPAS_LOG_CRIT)
@@ -224,7 +226,7 @@ module atm_time_integration
    end subroutine atm_timestep
 
 
-   subroutine atm_srk3(domain, dt, itimestep)
+   subroutine atm_srk3(domain, dt, itimestep, xtime_s)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
    ! Advance model state forward in time by the specified time step using 
    !   time-split RK3 scheme
@@ -243,6 +245,7 @@ module atm_time_integration
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
       integer, intent(in) :: itimestep
+      real (kind=RKIND), intent(in) :: xtime_s
 
       integer :: thread
       integer :: iCell, k, iEdge
@@ -281,6 +284,7 @@ module atm_time_integration
       integer, pointer :: index_qc, index_qr, index_qi, index_qs, index_qg, index_nr, index_ni
 
       character(len=StrKIND), pointer :: config_IAU_option
+      character(len=StrKIND), pointer :: config_fdda_scheme
 
       type (mpas_pool_type), pointer :: state
       type (mpas_pool_type), pointer :: diag
@@ -289,6 +293,7 @@ module atm_time_integration
       type (mpas_pool_type), pointer :: tend
       type (mpas_pool_type), pointer :: tend_physics => null()
       type (mpas_pool_type), pointer :: lbc  ! regional_MPAS addition
+      type (mpas_pool_type), pointer :: fdda 
 
       type (field2DReal), pointer :: theta_m_field
       type (field3DReal), pointer :: scalars_field
@@ -338,6 +343,7 @@ module atm_time_integration
       call mpas_pool_get_config(block % configs, 'config_microp_scheme', config_microp_scheme)
       call mpas_pool_get_config(block % configs, 'config_convection_scheme', config_convection_scheme)
 #endif
+      call mpas_pool_get_config(block % configs, 'config_fdda_scheme', config_fdda_scheme)
 
       !
       ! Retrieve field structures
@@ -350,6 +356,7 @@ module atm_time_integration
 #ifdef DO_PHYSICS
       call mpas_pool_get_subpool(block % structs, 'diag_physics', diag_physics)
 #endif
+      call mpas_pool_get_subpool(block % structs, 'fdda', fdda)
 
       !
       ! Retrieve dimensions
@@ -556,6 +563,16 @@ module atm_time_integration
          call atm_add_tend_anal_incr(block % configs, block % structs, itimestep, dt, &
                                      tend_ru_physics, tend_rtheta_physics, tend_rho_physics)
       end if
+
+      !
+      ! FDDA - Four-dimensional data assimilation (Grid point nudging)
+      !
+      ! MW: Why are tend_ru_physics and tend_rtheta_physics global variables, but not tend_scalars?
+      if (trim(config_fdda_scheme) /= 'off') then
+         call apply_fdda( block, xtime_s, block % configs, mesh, state, 1, fdda, diag, diag_physics, tend, tend_physics, &
+                          tend_ru_physics, tend_rtheta_physics)
+      end if
+
 
 
       DYNAMICS_SUBSTEPS : do dynamics_substep = 1, dynamics_split

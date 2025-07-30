@@ -916,7 +916,7 @@ module atm_core
       endif
 #endif
 
-      call atm_timestep(domain, dt, currTime, itimestep)
+      call atm_timestep(domain, dt, currTime, itimestep, xtime_s)
 
    end subroutine atm_do_timestep
    
