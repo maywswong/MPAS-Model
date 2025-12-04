@@ -569,7 +569,6 @@ module atm_time_integration
       !
       ! FDDA - Four-dimensional data assimilation (Grid point nudging)
       !
-      ! MW: Why are tend_ru_physics and tend_rtheta_physics global variables, but not tend_scalars?
       if (trim(config_fdda_scheme) /= 'off') then
          call apply_fdda( block, xtime_s, block % configs, mesh, state, 1, fdda, diag, diag_physics, tend, tend_physics, tend_fdda, &
                           tend_ru_physics, tend_rtheta_physics)
