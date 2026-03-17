@@ -40,6 +40,23 @@ module atm_time_integration
 
    ! Provides definition of halo_exchange_routine
 #include "mpas_halo_interface.inc"
+   use mpas_atm_mask ! nudging over an input masked region 
+
+   !
+   ! Abstract interface for routine used to communicate halos of fields
+   ! in a named group
+   !
+   abstract interface
+      subroutine halo_exchange_routine(domain, halo_group, ierr)
+
+         use mpas_derived_types, only : domain_type
+
+         type (domain_type), intent(inout) :: domain
+         character(len=*), intent(in) :: halo_group
+         integer, intent(out), optional :: ierr
+
+      end subroutine halo_exchange_routine
+   end interface
 
    integer :: timerid, secs, u_secs
 
@@ -1920,6 +1937,7 @@ module atm_time_integration
       type (mpas_pool_type), pointer :: tend
       type (mpas_pool_type), pointer :: tend_physics
       type (mpas_pool_type), pointer :: lbc  ! regional_MPAS addition
+      type (mpas_pool_type), pointer :: mask_input => null() 
 
       real (kind=RKIND), dimension(:,:), pointer :: w
       real (kind=RKIND), dimension(:,:), pointer :: u, uReconstructZonal, uReconstructMeridional, uReconstructX, uReconstructY, uReconstructZ
@@ -1937,6 +1955,11 @@ module atm_time_integration
 
       real (kind=RKIND)  :: time_dyn_step
       logical, parameter :: debug = .false.
+
+
+      ! Analysis grid nudging or latent-heat nudging applied over a masked region provided through an input stream
+      character(len=StrKIND), pointer :: config_nudge_mask
+
 
 
       !
@@ -1958,6 +1981,9 @@ module atm_time_integration
       call mpas_pool_get_config(block % configs, 'config_convection_scheme', config_convection_scheme)
 #endif
 
+      ! for nudging over a masked region
+      call mpas_pool_get_config(block % configs, 'config_nudge_mask', config_nudge_mask)
+
       !
       ! Retrieve field structures
       !
@@ -1966,6 +1992,8 @@ module atm_time_integration
       call mpas_pool_get_subpool(block % structs, 'diag', diag)
       call mpas_pool_get_subpool(block % structs, 'tend', tend)
       call mpas_pool_get_subpool(block % structs, 'tend_physics', tend_physics)
+
+      call mpas_pool_get_subpool(block % structs, 'mask_input', mask_input)
 #ifdef DO_PHYSICS
       call mpas_pool_get_subpool(block % structs, 'diag_physics', diag_physics)
 #endif
@@ -2045,6 +2073,7 @@ module atm_time_integration
       tend_rho_physics(:,nCells+1) = 0.0_RKIND
       call mpas_pool_get_array(tend_physics, 'tend_ru_physics', tend_ru_physics)
       tend_ru_physics(:,nEdges+1) = 0.0_RKIND
+
 
       !
       ! Initialize RK weights
@@ -2161,6 +2190,16 @@ module atm_time_integration
 #endif
 
       !$acc enter data copyin(tend_rtheta_physics,tend_rho_physics,tend_ru_physics)
+
+      !
+      ! for nudging applied only over a masked region
+      !
+      if (trim(config_nudge_mask) /= 'off') then
+          call mpas_log_write(' Beginning the test mask part of the code ' ) 
+          call atm_retrieve_masked_region(block % configs, block % structs )
+          call mpas_log_write(' Finishing test mask part of the code ' ) 
+      endif
+
 
       !
       ! IAU - Incremental Analysis Update

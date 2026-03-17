@@ -130,6 +130,9 @@ module atm_core_interface
       character(len=StrKIND), pointer :: config_gwdo_scheme
       logical, pointer :: config_ngw_scheme
       logical, pointer :: config_ugwp_diags
+      logical, pointer :: nudgingActive
+      character(len=StrKIND), pointer :: config_nudge_mask
+
       character(len=StrKIND) :: attvalue
       integer :: local_ierr
 
@@ -258,6 +261,23 @@ module atm_core_interface
       end if
 
 #endif
+
+      !
+      ! Test : FDDA analysis nudging over user-specified region 
+      !
+      call mpas_log_write('Setting up package for test FDDA mask')
+      nullify(config_nudge_mask)
+      call mpas_pool_get_config(configs, 'config_nudge_mask', config_nudge_mask)
+
+      nullify(nudgingActive)
+      call mpas_pool_get_package(packages, 'nudgingActive', nudgingActive)
+
+      if (trim(config_nudge_mask) /= 'off') then
+         nudgingActive = .true.
+      else
+         nudgingActive = .false.
+      end if
+
 
    end function atm_setup_packages
 

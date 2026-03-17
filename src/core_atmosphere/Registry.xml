@@ -458,6 +458,12 @@
                      possible_values="Any valid filename"/>
         </nml_record>
 #endif
+        <nml_record name="nudging" in_defaults="true">
+                <nml_option name="config_nudge_mask" type="character" default_value="off"
+                     units="-"
+                     description="Applying nudging over an input masked region only"
+                     possible_values="`off' or `on'; `off' turns off the mask; `on' reads in an input file with the masked region"/>
+	</nml_record>
 
 <!-- **************************************************************************************** -->
 <!-- **************************************  Packages  ************************************** -->
@@ -488,6 +494,7 @@
                 <package name="sfclayer"
                          description="Variables and options associated with surface layer physics"
                          active_when="(trim(config_physics_suite) /= 'none' .and. trim(config_sfclayer_scheme) == 'suite') .or.  any(trim(config_sfclayer_scheme) == [ character(len=StrKind) :: 'sf_monin_obukhov', 'sf_monin_obukhov_rev', 'sf_mynn' ])"/>
+                <package name="nudging" description="Nudging (grid analysis nudging or latent heat nudging)"/>
         </packages>
 
 
@@ -1345,6 +1352,18 @@
                         <var name="dtdt_ngw"/>
                 </stream>
 #endif
+		<stream name="nudge_mask" 
+                        type="input" 
+                        filename_template="x1.40962.mask_region.nc" 
+                        input_interval="initial_only"
+                        filename_interval="none"
+                        immutable="true"
+                        packages="nudging">
+
+			<var name="nudgeMaskCell"/>
+			<var name="nudgeMaskEdge"/>
+			<var name="nudgeMaskVertex"/>
+		</stream>
 
 	</streams>
 
@@ -4007,6 +4026,23 @@
                           description="Graupel mixing ratio increment"/>
                 </var_array>
          </var_struct>
+
+         <var_struct name="mask_input" time_levs="1" packages="nudging">
+                <var name="nudgeMaskCell" type="integer"  dimensions="nCells Time" units="unitless"
+                     description="User-defined masked region (nCells) for nudging purposes"/>
+
+                <var name="nudgeMaskEdge" type="integer" dimensions="nEdges Time" units="unitless"
+                     description="User-defined masked region (nEdges) for nudging purposes"/>
+
+                <var name="nudgeMaskVertex" type="integer" dimensions="nVertices Time" units="unitless"
+                     description="User-defined masked region (nVertices) for nudging purposes"/>
+
+                <var name="testMaskCell" type="integer"  dimensions="nCells Time" units="unitless"
+                     description="Test variable: User-defined masked region (nCells) for nudging purposes"/>
+
+         </var_struct>
+
+
 
 
 <!-- **************************************************************************************** -->
