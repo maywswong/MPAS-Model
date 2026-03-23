@@ -1356,7 +1356,6 @@
                         type="input" 
                         filename_template="x1.40962.mask_region.nc" 
                         input_interval="initial_only"
-                        filename_interval="none"
                         immutable="true"
                         packages="nudging">
 

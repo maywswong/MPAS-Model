@@ -232,6 +232,19 @@ module atm_core
       end if
       call MPAS_stream_mgr_reset_alarms(domain % streamManager, streamID='iau', ierr=ierr)
 
+      ! MW: 2026-03-23
+      ! Read a new data stream for the mask that is used for analysis/tendency nudging, if config_nudge_mask /= 'off'  
+      !
+      call MPAS_stream_mgr_read(domain % streamManager, streamID='nudge_mask', whence=MPAS_STREAM_NEAREST, ierr=ierr)
+      if (ierr /= MPAS_STREAM_MGR_NOERR) then
+         call mpas_log_write('********************************************************************************', messageType=MPAS_LOG_ERR)
+         call mpas_log_write('Error reading mask used for nudging',                                              messageType=MPAS_LOG_ERR)
+         call mpas_log_write('********************************************************************************', messageType=MPAS_LOG_CRIT)
+      end if
+      call MPAS_stream_mgr_reset_alarms(domain % streamManager, streamID='nudge_mask', ierr=ierr)
+
+
+
       !
       ! Set startTimeStamp based on the start time of the simulation clock
       !
