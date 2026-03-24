@@ -4027,16 +4027,16 @@
          </var_struct>
 
          <var_struct name="mask_input" time_levs="1" packages="nudging">
-                <var name="nudgeMaskCell" type="integer"  dimensions="nCells Time" units="unitless"
+                <var name="nudgeMaskCell" type="real"  dimensions="nCells Time" units="unitless"
                      description="User-defined masked region (nCells) for nudging purposes"/>
 
-                <var name="nudgeMaskEdge" type="integer" dimensions="nEdges Time" units="unitless"
+                <var name="nudgeMaskEdge" type="real" dimensions="nEdges Time" units="unitless"
                      description="User-defined masked region (nEdges) for nudging purposes"/>
 
-                <var name="nudgeMaskVertex" type="integer" dimensions="nVertices Time" units="unitless"
+                <var name="nudgeMaskVertex" type="real" dimensions="nVertices Time" units="unitless"
                      description="User-defined masked region (nVertices) for nudging purposes"/>
 
-                <var name="testMaskCell" type="integer"  dimensions="nCells Time" units="unitless"
+                <var name="testMaskCell" type="real"  dimensions="nCells Time" units="unitless"
                      description="Test variable: User-defined masked region (nCells) for nudging purposes"/>
 
          </var_struct>

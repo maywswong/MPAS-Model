@@ -33,8 +33,8 @@ module mpas_atm_mask
       integer :: i
       integer, pointer :: nCellsSolve, nEdgesSolve, nVerticesSolve
       
-      integer, dimension(:), pointer :: nudgeMaskCell, nudgeMaskEdge, nudgeMaskVertex 
-      integer, dimension(:), pointer :: testMaskCell 
+      real, dimension(:), pointer :: nudgeMaskCell, nudgeMaskEdge, nudgeMaskVertex 
+      real, dimension(:), pointer :: testMaskCell 
 
 
       call mpas_pool_get_subpool(structs, 'mask_input', mask_input)

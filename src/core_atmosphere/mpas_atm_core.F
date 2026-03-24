@@ -233,7 +233,7 @@ module atm_core
       call MPAS_stream_mgr_reset_alarms(domain % streamManager, streamID='iau', ierr=ierr)
 
       ! MW: 2026-03-23
-      ! Read a new data stream for the mask that is used for analysis/tendency nudging, if config_nudge_mask /= 'off'  
+      ! Read a new data stream for the mask that is used for analysis/latent-heat tendency nudging, if config_nudge_mask /= 'off'  
       !
       call MPAS_stream_mgr_read(domain % streamManager, streamID='nudge_mask', whence=MPAS_STREAM_NEAREST, ierr=ierr)
       if (ierr /= MPAS_STREAM_MGR_NOERR) then
