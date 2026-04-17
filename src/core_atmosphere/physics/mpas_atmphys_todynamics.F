@@ -24,6 +24,9 @@
  use mpas_atmphys_constants, only: R_d,R_v,degrad
  use mpas_timer, only: mpas_timer_start, mpas_timer_stop
 
+ use mpas_log, only : mpas_log_write
+
+
  implicit none
  private
  public:: physics_get_tend, pre_physics_get_tend, post_physics_get_tend
@@ -95,13 +98,13 @@
  end subroutine pre_physics_get_tend
  
 !=================================================================================================================
- subroutine physics_get_tend(block,mesh,state,diag,tend,tend_physics,configs,rk_step,dynamics_substep, &
+ subroutine physics_get_tend(block,mesh,mask_input,state,diag,tend,tend_physics,configs,rk_step,dynamics_substep, &
                              tend_ru_physics,tend_rtheta_physics,tend_rho_physics,exchange_halo_group)
-!=================================================================================================================
 
 !input variables:
  type(block_type),intent(in),target:: block
  type(mpas_pool_type),intent(in):: mesh
+ type(mpas_pool_type),intent(in):: mask_input  ! MW: added for masking latent heating
  type(mpas_pool_type),intent(in):: state
  type(mpas_pool_type),intent(in):: configs
  integer,intent(in):: rk_step
@@ -146,6 +149,10 @@
  real(kind=RKIND),dimension(:,:),pointer:: rublten_Edge,rucuten_Edge
 
  real(kind=RKIND),dimension(:,:),allocatable:: tend_th
+
+!local pointers for masked nudging:
+ real(kind=RKIND), dimension(:), pointer :: nudgeMaskCell, nudgeMaskEdge
+ character(len=StrKIND), pointer :: config_nudge_mask
 
 !=================================================================================================================
 
@@ -204,6 +211,11 @@
 
  call mpas_pool_get_array(tend,'scalars_tend',tend_scalars)
 
+! for masking 
+ call mpas_pool_get_config(block % configs, 'config_nudge_mask', config_nudge_mask)
+ call mpas_pool_get_array(mask_input, 'nudgeMaskCell',   nudgeMaskCell)
+ call mpas_pool_get_array(mask_input, 'nudgeMaskEdge',   nudgeMaskEdge)
+
 
 !initialize the tendency for the potential temperature and all scalars due to PBL, convection,
 !and longwave and shortwave radiation:
@@ -239,6 +251,10 @@
  if(.not. associated(rnifablten)) allocate(rnifablten(0,0))
  if(.not. associated(rnwfablten)) allocate(rnwfablten(0,0))
 
+ if (.not. associated(nudgeMaskCell)) allocate(nudgeMaskCell(nCells))
+ if (.not. associated(nudgeMaskEdge)) allocate(nudgeMaskEdge(nEdges))
+
+
  call physics_get_tend_work( &
               block,mesh,nCells,nEdges,nCellsSolve,nEdgesSolve,rk_step,dynamics_substep, &
               pbl_scheme,convection_scheme,microp_scheme,radt_lw_scheme,radt_sw_scheme,  &
@@ -249,8 +265,10 @@
               rncblten,rniblten,rnifablten,rnwfablten,                                   &
               rucuten,rvcuten,rthcuten,rqvcuten,rqccuten,rqrcuten,rqicuten,rqscuten,     &
               rthratenlw,rthratensw,rublten_Edge,rucuten_Edge,                           &
+              config_nudge_mask, nudgeMaskCell, nudgeMaskEdge,                                  &
               tend_th,tend_rtheta_physics,tend_scalars,tend_ru_physics,tend_u_phys,      &
               exchange_halo_group)
+
 
 !clean up any pointers that were allocated with zero size before the call to physics_get_tend_work:
  if(size(rucuten) == 0 ) deallocate(rucuten )
@@ -311,6 +329,7 @@
                     rncblten,rniblten,rnifablten,rnwfablten,                                   &
                     rucuten,rvcuten,rthcuten,rqvcuten,rqccuten,rqrcuten,rqicuten,rqscuten,     &
                     rthratenlw,rthratensw,rublten_Edge,rucuten_Edge,                           &
+                    config_nudge_mask, nudgeMaskCell, nudgeMaskEdge,                           &
                     tend_th,tend_theta,tend_scalars,tend_u,tend_u_phys,                        &
                     exchange_halo_group)
 !=================================================================================================================
@@ -371,6 +390,13 @@
  real(kind=RKIND),intent(inout),dimension(nVertLevels,nCells+1):: tend_theta
 
  real(kind=RKIND),intent(inout),dimension(num_scalars,nVertLevels,nCells+1):: tend_scalars
+
+! MW : mask input 
+ character(len=StrKIND), intent(in) :: config_nudge_mask
+ real (kind=RKIND), dimension(nCells+1), intent(in) :: nudgeMaskCell
+ real (kind=RKIND), dimension(nEdges+1), intent(in) :: nudgeMaskEdge
+ real (kind=RKIND) :: const_nudge_fac
+! end MW
 
 !local variables:
  integer:: i,k
@@ -436,6 +462,44 @@
        tend_scalars(index_qi,k,i) = tend_scalars(index_qi,k,i) + rqicuten(k,i)*mass(k,i)
     enddo
     enddo
+
+
+
+    ! original mod code 
+    !do k = 1, 18
+    !   tend_th(k,i) = tend_th(k,i) + rthcuten(k,i)*mass(k,i)
+    !   rthcuten_tend(k,i) = rthcuten(k,i)*mass(k,i)  ! MW on ITM   
+    !end do
+
+    !***
+    ! MW: Adding nudging of the net latent heating from the cumulus scheme
+    if (trim(config_nudge_mask) /= 'off') then
+
+      const_nudge_fac = -0.5_RKIND  ! neg: damping; pos: enhancing 
+      do i = 1, nCellsSolve
+      do k = 19, nVertLevels 
+         ! nudgeMaskCell is defined as 1.0_RKIND where LH damping occurs, and 0._RKIND everywhere else
+         ! to reduce strength (e.g., by 50%) of latent heating -- multiply RHS 2nd term by 0.5_RKIND
+         tend_th(k,i) = tend_th(k,i) + const_nudge_fac*rthcuten(k,i)*mass(k,i)*nudgeMaskCell(i)
+      end do
+      end do
+
+      !***
+      ! alternative method but more difficult to adjust LH nudging strength 
+      !if (trim(config_nudge_mask) /= 'off') then
+      !! if nudgeMaskCell is an inverted mask (with zeros in the region of NO LH)
+      !do k = 1, 18
+      !   tend_th(k,i) = tend_th(k,i) + rthcuten(k,i)*mass(k,i)
+      !   rthcuten_tend(k,i) = rthcuten(k,i)*mass(k,i)  ! MW on ITM   
+      !end do
+      !do k = 19, nVertLevels
+      !   tend_th(k,i) = tend_th(k,i) + rthcuten(k,i)*mass(k,i)*nudgeMaskCell(i)
+      !   rthcuten_tend(k,i) = rthcuten(k,i)*mass(k,i)*nudgeMaskCell(i)  ! MW on ITM   
+      !end do
+      !end if
+      !***
+
+    end if
 
     cu_select: select case(trim(convection_scheme))
        case('cu_kain_fritsch')
