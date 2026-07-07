@@ -314,7 +314,7 @@
  end subroutine init_microphysics
 
 !=================================================================================================================
- subroutine driver_microphysics(configs,mesh,state,time_lev,diag,diag_physics,tend_physics,tend,itimestep,its,ite)
+ subroutine driver_microphysics(configs,mesh,mask_input,state,time_lev,diag,diag_physics,tend_physics,tend,itimestep,its,ite)
 !=================================================================================================================
 
  use mpas_constants, only : rvord
@@ -322,6 +322,7 @@
 !input arguments:
  type(mpas_pool_type),intent(in):: configs
  type(mpas_pool_type),intent(in):: mesh
+ type(mpas_pool_type),intent(in):: mask_input 
 
  integer,intent(in):: time_lev
  integer,intent(in):: itimestep
@@ -486,7 +487,7 @@
 
 !... copy updated cloud microphysics variables from the wrf-physics grid back to the geodesic-
 !    dynamics grid:
- call microphysics_to_MPAS(configs,mesh,state,time_lev,diag,diag_physics,tend_physics,tend,its,ite)
+ call microphysics_to_MPAS(configs,mesh,mask_input,state,time_lev,diag,diag_physics,tend_physics,tend,its,ite)
 
 !... deallocation of all microphysics arrays:
 !$OMP BARRIER

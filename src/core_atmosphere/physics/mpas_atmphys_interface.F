@@ -22,6 +22,7 @@
  use mpas_atmphys_constants
  use mpas_atmphys_vars
  use mpas_timer, only: mpas_timer_start, mpas_timer_stop
+ use mpas_constants, only: pii
 
  implicit none
  private
@@ -823,7 +824,7 @@ end subroutine pre_microphysics
  end subroutine microphysics_from_MPAS
 
 !=================================================================================================================
- subroutine microphysics_to_MPAS(configs,mesh,state,time_lev,diag,diag_physics,tend_physics,tend,its,ite)
+ subroutine microphysics_to_MPAS(configs,mesh,mask_input,state,time_lev,diag,diag_physics,tend_physics,tend,its,ite)
 !=================================================================================================================
 
 !input variables:
@@ -835,6 +836,7 @@ end subroutine pre_microphysics
 
 !inout variables:
  type(mpas_pool_type),intent(inout):: state
+ type(mpas_pool_type),intent(in):: mask_input 
  type(mpas_pool_type),intent(inout):: diag
  type(mpas_pool_type),intent(inout):: tend
  type(mpas_pool_type),intent(inout):: diag_physics
@@ -860,6 +862,14 @@ end subroutine pre_microphysics
  real(kind=RKIND),dimension(:,:),pointer  :: rncmpten,rnimpten,rnrmpten,rnifampten,rnwfampten
  real(kind=RKIND),dimension(:,:,:),pointer:: scalars
  integer,pointer:: mp_top_level
+
+! MW: local pointers for masked nudging
+  real(kind=RKIND), dimension(:), pointer :: nudgeMaskCell, nudgeMaskEdge
+  character(len=StrKIND), pointer :: config_nudge_mask
+  real (kind=RKIND) :: const_nudge_fac, nudge_fac
+  real (kind=RKIND) :: nudge_vert_adj
+  real (kind=RKIND) :: z0, z1, kz0, kz1, zm
+  integer, pointer :: nCells, nEdges
 
 !local variables:
  integer:: icount
@@ -899,6 +909,15 @@ end subroutine pre_microphysics
 
  call mpas_pool_get_array(tend,'rt_diabatic_tend',rt_diabatic_tend)
 
+ call mpas_pool_get_config(configs, 'config_nudge_mask', config_nudge_mask)
+ call mpas_pool_get_array(mask_input, 'nudgeMaskCell',   nudgeMaskCell)
+ call mpas_pool_get_array(mask_input, 'nudgeMaskEdge',   nudgeMaskEdge)
+ call mpas_pool_get_dimension(mesh, 'nCells',   nCells)
+ call mpas_pool_get_dimension(mesh, 'nEdges',   nEdges)
+
+ if (.not. associated(nudgeMaskCell)) allocate(nudgeMaskCell(nCells))
+ if (.not. associated(nudgeMaskEdge)) allocate(nudgeMaskEdge(nEdges))
+
 !update variables needed in the dynamical core:
  do j = jts,jte
  do k = kts,mp_top_level
@@ -918,6 +937,42 @@ end subroutine pre_microphysics
     theta_m(k,i) = th_p(i,k,j) * (1._RKIND+rvord*qv_p(i,k,j))
     rt_diabatic_tend(k,i) = (theta_m(k,i) - rt_diabatic_tend(k,i))/dt_dyn
     dtheta_dt_mp(k,i)     = (theta_m(k,i)/(1._RKIND+rvord*qv(k,i))-dtheta_dt_mp(k,i))/(dt_dyn)
+
+    if (trim(config_nudge_mask) /= 'off') then
+
+       if (.true.) then
+          ! smoothly varying by height
+          z0 = 1500.0_RKIND   ! bottom of transition layer
+          z1 = 2500.0_RKIND   ! top of transition layer
+          zm = 0.5_RKIND * ( zgrid(k,i) + zgrid(k+1,i) )
+          if ( zm <= z1 .and. zm > z0 ) then
+             nudge_vert_adj = cos( pii*0.5_RKIND*(zm-z1)/(z0-z1) )**2
+          elseif ( zm > z1 ) then
+             nudge_vert_adj = 1.0_RKIND
+          else
+             nudge_vert_adj = 0.0_RKIND
+          endif
+       else
+          ! smoothly varying by model level
+          kz0 = 15
+          kz1 = 20
+          if ( k <= kz1 .and. k > kz0 ) then
+             nudge_vert_adj = cos( pii*0.5_RKIND*(k-kz1)/(kz0-kz1))**2
+          elseif ( k > kz1 ) then
+             nudge_vert_adj = 1.0_RKIND
+          else
+             nudge_vert_adj = 0.0_RKIND
+          endif
+       endif
+
+       const_nudge_fac = -0.5_RKIND
+       nudge_fac = 1.0_RKIND+const_nudge_fac*nudgeMaskCell(i)*nudge_vert_adj
+
+       ! update theta_m due to nudged rt_diabatic_tend
+       theta_m(k,i) = theta_m(k,i) + (nudge_fac-1.0_RKIND)*rt_diabatic_tend(k,i)*dt_dyn
+       rt_diabatic_tend(k,i) = rt_diabatic_tend(k,i) * nudge_fac
+    end if  ! config_nudge_mask
+
 
     !density-weighted perturbation potential temperature:
     rtheta_p(k,i) = rho_zz(k,i) * theta_m(k,i) - rtheta_b(k,i)
